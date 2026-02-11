@@ -1,6 +1,7 @@
 // require('dotenv').config()
 import dotenv from "dotenv";
 import connectDB from "./db/index.js";
+import app from "./app.js";
 
 dotenv.config({
     path: './env'
@@ -20,17 +21,6 @@ connectDB()
 
 
 //  app.use ap tab use karo ga jab apko koi middleware ya fir koi configuration setting karni hogi
-
-
-
-
-
-
-
-
-
-
-
 
 
 
