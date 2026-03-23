@@ -3,7 +3,26 @@ import {ApiError} from "../utils/ApiError.js"
 import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken"
 
+
+const generateAccessAndRefreshTokens = async(userId) => {
+  try {
+    const user = await User.findById(userId)
+    const accessToken = user.generateAccessToken()
+    const refreshToken = user.generateRefreshToken()
+
+    user.refreshToken = refreshToken
+    await user.save ({ validateBeforeSave: false})
+
+    return {accessToken, refreshToken}
+
+
+  } catch(errror){
+    throw new ApiError
+  }
+
+}
 const registerUser = asyncHandler(async(req, res) => {
   // registerUser use karega to kya kya steps follow karenga
 // 1.)get user details from frontend
@@ -83,11 +102,154 @@ const registerUser = asyncHandler(async(req, res) => {
 
 });
 
+const loginUser = asyncHandler(async (req, res) =>{
+  // req body -> data
+  //username or email
+  // find the user
+  //password check
+  //access and refresh token
+  // send cookie
+
+  const{email, username, password } = req.body
+  console.log(email);
+
+  if (!username && !email) {
+    throw new ApiError(400, "username or email is required")
+  }
+
+  // Here is an alternative of above code based on logic discussed in video:
+  //if (!(usernsme || email)) {
+  // throw.new ApiError(400, "username bor email is required")
+  //  }
+  
+  const user = await User.findOne({
+    $or: [{username}, {email}]
+})
+
+if (!user) {
+  throw new ApiError(404, "User does not exist")
+}
+
+const isPasswordValid = await user.isPasswordCorrect(password)
+
+if(!isPasswordValid) {
+  throw new ApiError(401, "Invalid user credentials")
+}
+
+  const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id)
+
+  const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+
+  const options = {
+    httpOnly: true,
+    secure: true
+  }
+
+  return res
+  .status(200)
+  .cookie("accessToken", accessToken, options)
+  .cookie("refreshToken",  refreshToken, options)
+  .json(
+    new ApiResponse(
+      200,
+      {
+        user: loggedInUser,accessToken,refreshToken
+      },
+      "User logged In Successfully"
+    )
+  )
+
+}) 
+
+const logoutUser = asyncHandler(async(req, res) => {
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: {
+        refreshToken: undefined
+        }
+    },
+    {
+      new: true
+    }
+  )
+
+  const options = {
+    httpOnly: true,
+    secure: true
+  }
+
+  return res
+  .status(200)
+  .clearCookie("accessToken", options)
+  .clearCookie("refreshToken",options)
+  .json(new ApiResponse(200, {}, "User logged Out"))
+
+})
+// logout kisa kiya jayaga 
+// 1.) first step is to clear the cookie
+// 2.) or second step pa apko refreshToken ko bhi  user.model.js sa bhi to reset  karna pada ga
+
+const refreshAccessToken = asyncHandler(async (req,res) => {
+  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+
+  if (incomingRefreshToken){
+    throw new ApiError(401, "unauthorized request")
+  }
+
+  try {
+    const decodedToken = jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    )
+  
+     const user = await User.findById(decodedToken?._id)
+  
+     if(!user) {
+      throw new ApiError(401, "unauthorized request")
+     }
+  
+     if(incomingRefreshToken !== urser?.refreshToken) {
+      throw new ApiError(401, "Invalid refresh token is expired or used")
+     }
+  
+     const options = {
+      httpOnly: true,
+      secure: true
+     }
+  
+     const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id)
+  
+     return res
+     .status(200)
+     .cookie("accessToken",accessToken,options)
+     .cookie("refreshToken",refreshToken,options)
+     .json(
+      new ApiResponse(
+        200,
+        {accessToken, refreshToken: newRefreshToken},
+        "Access token refreshed"
+      )
+     )
+  } catch (error) {
+    throw new ApiError(401,error?.message || "Invalid refresh token")
+    
+  }
+})
+
 export {
-    registerUser
+    registerUser,
+    loginUser,
+    logoutUser,
+    refreshAccessToken
 }
 
 //kuki ya ek array hai or array pa bahut sara method hota hai to hum .map lga sakta  hai lakin yha pa hum .some ka upar hum condition lga ka check karta hai or ya true or false return karta hai.
 // .map ma ya problem ha ki usko return kya kar rha hai ,sub pa return hai, or final return kya aa rha hai  ya sab check karna padega
 
+ // $or it is a mongodb operators
+
+ // middleaware - matlab jana sa phala mil ka jaya ga. example - jisa multer  ma form ka data to ja rha sath ma images ko bhi lata jao sath ma  yahi to middleaware  tha.
+ // cookie = two way access hoti hai 
  
+ // uses of accesToken and refreshToken is that  ki user ko bar bar apna email or password na dana pada,or accesToken is a short lived hota hai means one day ya khi save nhi hota hai sirf user ka pass hota hai  or dusra hota hai session storage jisko hum refreshToken bhi bolta hai jisko hum database ma bhi rakta hai
