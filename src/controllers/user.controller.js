@@ -237,11 +237,130 @@ const refreshAccessToken = asyncHandler(async (req,res) => {
   }
 })
 
+const changeCurrentPassword = asyncHandler(async(req, res) => {
+  const {oldPassword, newPassword} = req.body
+
+  const user = await User.findById(req.user?._id)
+   const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
+
+   if(!isPasswordCorrect){
+          throw new ApiError(400, "Invalid old password")
+   }
+
+   user.password = newPassword
+    await user.save({validateBeforeSave: false})
+
+    return res
+    .status(200
+    .json(new ApiResponse(200, {}, "Password changed Successfully"))
+    )
+})
+
+const getCurrentUser = asyncHandler(async(req,res) => {
+  return res
+  .status(200)
+  .json(200, req.user, "current user fetched successfully")
+})
+
+const updateAccountDetails = asyncHandler(async(req, res) => {
+  const { fullName, email} = req.body
+
+  if(!fullName || !email) {
+    throw new ApiError(400, "All fields are required")
+  }
+
+ const user = User.findByIdAndUpdate(
+  req.user?._id,
+  {
+    $set:{
+      fullName,
+      email: email
+    }
+  },
+  {new: true}
+
+).select("-password")
+
+ return res
+ .status(200)
+ .json(new ApiResponse(200, user, "Account details updated successfully"))
+})
+
+const updateUserAvatar =asyncHandler(async(req, res) => {
+  const avatarLocalPath = req.file?.path
+
+  if(!avatarLocalPath){
+    throw new ApiError(400, "Avatar file is missing")
+  }
+
+  const avatar = await uploadOnCloudinary(avatarLocalPath)
+
+  if (!avatar.url) {
+    throw new ApiError(400, "Error while uploading on avatar ")
+
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set:{
+        avatar: avatar.url
+      }
+    },
+    {new: true}
+  ).select("-password")
+
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(200, user, "Avatar image updated successfully")
+  )
+
+})
+
+const updateUserCoverImage = asyncHandler(async(req, res) => {
+  const coverImageLocalPath = req.file?.path
+
+  if(!avatarLocalPath){
+    throw new ApiError(400, "Cover image file is missing")
+  }
+
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath)
+
+  if (!coverImage.url) {
+    throw new ApiError(400, "Error while uploading the image ")
+
+  }
+
+   const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set:{
+        avatar:coverImage.url
+      }
+    },
+    {new: true}
+  ).select("-password")
+
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(200, user, "Cover image updated successfully")
+  )
+
+})
+
+
 export {
     registerUser,
     loginUser,
     logoutUser,
-    refreshAccessToken
+    refreshAccessToken,
+    changeCurrentPassword,
+    getCurrentUser,
+    updateAccountDetails,
+    updateUserAvatar,
+    updateUserCoverImage
 }
 
 //kuki ya ek array hai or array pa bahut sara method hota hai to hum .map lga sakta  hai lakin yha pa hum .some ka upar hum condition lga ka check karta hai or ya true or false return karta hai.
@@ -253,3 +372,7 @@ export {
  // cookie = two way access hoti hai 
  
  // uses of accesToken and refreshToken is that  ki user ko bar bar apna email or password na dana pada,or accesToken is a short lived hota hai means one day ya khi save nhi hota hai sirf user ka pass hota hai  or dusra hota hai session storage jisko hum refreshToken bhi bolta hai jisko hum database ma bhi rakta hai
+
+ // files ko kisa update kara
+ // 1.) first middleware apko lagana padga multer thaki files ap accept kar pao/
+ // 2.) second only those person are update that is already loggedin
